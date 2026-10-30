@@ -1,5 +1,5 @@
 # language: Python 3.11+, file: binance_cascade_hunter_dynamic_v2.py
-# target: Binance USDT-M Futures — V2: 10% wallet margin, 50x, 15% price stop, max 3
+# target: Binance USDT-M Futures — V2: 5% wallet margin, 50x, 5% price stop, max 5
 # deps: pip install ccxt pandas numpy aiohttp
 
 import asyncio
@@ -13,16 +13,16 @@ log = logging.getLogger("CASCADE")
 # === CONFIG ===
 
 LEVERAGE = 50
-MAX_POSITION_PCT = 0.10          # 10% من رصيد المحفظة الحالي كهامش لكل صفقة
+MAX_POSITION_PCT = 0.05          # 5% من رصيد المحفظة الحالي كهامش لكل صفقة
 CASCADE_THRESHOLD = 0.012        # 1.2%
 VOLUME_SPIKE = 3.5
 TAKE_PROFIT_PCT = 0.018
-STOP_LOSS_PCT = 0.15             # حركة سعرية 15% من سعر الإشارة، لا 15% من الهامش
+STOP_LOSS_PCT = 0.05             # حركة سعرية 5%؛ Final-2 يثبت الوقف من سعر التنفيذ الأول
 COOLDOWN_SEC = 8
 
 SCAN_INTERVAL = 600              # 10 دقائق
 MAX_SYMBOLS_TO_SCAN = 40         # أعلى 40 عملة سيولة
-MAX_CONCURRENT_POSITIONS = 3     # أقصى عدد مراكز مفتوحة في نفس الوقت
+MAX_CONCURRENT_POSITIONS = 5     # أقصى عدد مراكز مفتوحة في نفس الوقت
 MIN_QUOTE_VOLUME = 15_000_000    # حجم تداول 24 ساعة أدنى (USDT)
 
 class CascadeHunter:
