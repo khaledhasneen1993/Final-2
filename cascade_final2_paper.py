@@ -1,4 +1,4 @@
-"""Final-2: independent paper account with two scale-ins and profit trailing."""
+"""Final-2: independent paper account with one equal-notional scale-in and profit trailing."""
 import argparse
 import asyncio
 import math
@@ -10,8 +10,8 @@ import aiohttp
 from binance_cascade_hunter_dynamic_v2_paper import V2PaperHunter
 from binance_cascade_hunter_dynamic_v2 import log
 
-ADD_LEVELS = (0.05, 0.10)
-ADD_FRACTION = 0.50
+ADD_LEVELS = (0.025,)
+ADD_FRACTION = 1.0
 TRAIL_ACTIVATION = 0.018
 TRAIL_DISTANCE = 0.009
 TARGET_STEP = 0.005
@@ -25,7 +25,7 @@ class Final2PaperHunter(V2PaperHunter):
     def settings(self):
         return {**super().settings(), 'mode':'final2_scale_trail',
                 'add_levels':list(ADD_LEVELS), 'add_fraction':ADD_FRACTION,
-                'add_basis':'original_fill_notional', 'stop_basis':'original_signal_price',
+                'add_basis':'original_fill_notional', 'stop_basis':'original_fill_price',
                 'trail_activation':TRAIL_ACTIVATION, 'trail_distance':TRAIL_DISTANCE,
                 'target_step':TARGET_STEP}
 
@@ -37,8 +37,11 @@ class Final2PaperHunter(V2PaperHunter):
         p=self.positions[symbol]
         fill=self.exchange.positions[symbol]
         p.update(original_entry=fill['entry'], original_notional=fill['entry']*fill['amount'],
-                 initial_sl=p['sl'], adds_done=0, trailing=False, best_price=fill['entry'],
+                 initial_sl=fill['entry']*(1-self.strategy.STOP_LOSS_PCT if side=='buy'
+                                        else 1+self.strategy.STOP_LOSS_PCT),
+                 adds_done=0, trailing=False, best_price=fill['entry'],
                  entry=fill['entry'], amount=fill['amount'])
+        p['sl']=p['initial_sl']
         p['tp']=p['entry']*(1+TRAIL_ACTIVATION if side=='buy' else 1-TRAIL_ACTIVATION)
         self.save()
         return True
