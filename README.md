@@ -36,6 +36,8 @@ python -m pip install -r requirements.txt
 python -u cascade_final2_paper.py 2>&1 | tee -a final2-paper.log
 ```
 
+لتفعيل إرسال بيانات Final-2 إلى اللوحة الموحدة، خزّن رمز Final-2 محليًا في `.dashboard.env` داخل مجلد المستودع ضمن المتغير `CASCADE_DASHBOARD_TOKEN`، ثم نفّذ `set -a; source .dashboard.env; set +a` قبل أمر التشغيل. لا ترفع ملف الرمز إلى GitHub. عند تفعيل المتغير يظهر سجل `COMBINED DASHBOARD TELEMETRY ENABLED` ويُرسل آخر رصيد والمراكز والتنفيذات والتعزيزات كل 10 ثوانٍ.
+
 Python 3.11 أو أحدث. هذا الأمر يستعيد `paper_state_final2.json` تلقائيًا؛ لإجراء تجربة مستقلة مع حفظ السابقة:
 
 ```bash
