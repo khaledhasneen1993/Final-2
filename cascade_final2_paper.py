@@ -2,6 +2,11 @@
 import argparse
 import asyncio
 import math
+import os
+import copy
+from datetime import datetime, timezone
+from pathlib import Path
+import aiohttp
 from binance_cascade_hunter_dynamic_v2_paper import V2PaperHunter
 from binance_cascade_hunter_dynamic_v2 import log
 
@@ -96,6 +101,71 @@ class Final2PaperHunter(V2PaperHunter):
                 self.save()
 
 
+
+
+class DashboardPublisher:
+    """Optional telemetry-only publisher; strategy and paper execution stay untouched."""
+    URL = "https://coamowlsyuqbxngijxsu.supabase.co/functions/v1/cascade-dashboard"
+
+    def __init__(self, bot, session_id, token):
+        self.bot, self.session_id, self.token = bot, session_id, token
+
+    def snapshot(self, status="running"):
+        bot = self.bot
+        return copy.deepcopy({
+            "session_id": self.session_id, "status": status,
+            "sent_at": datetime.now(timezone.utc).isoformat(),
+            "initial_balance_usdt": 100.0, "settings": bot.settings(),
+            "fee_rate": bot.exchange.fee_rate,
+            "balance_usdt": bot.exchange.balance, "equity_usdt": bot.exchange.equity,
+            "free_usdt": bot.exchange.free, "used_usdt": bot.exchange.used,
+            "account_positions": bot.exchange.positions,
+            "strategy_positions": bot.positions, "prices": bot.exchange.prices,
+            "trades": bot.exchange.trades,
+            "scanner": {"connected": bot.scanner.connected,
+                        "symbols": len(bot.scanner.symbols), "events": bot.scanner.events,
+                        "entries": bot.scanner.entries},
+        })
+
+    async def upload(self, session, status="running"):
+        async with session.post(
+            self.URL, json=self.snapshot(status),
+            headers={"x-bot-id": "final2", "x-bot-token": self.token},
+        ) as response:
+            if response.status != 200 or (await response.json()).get("ok") is not True:
+                raise RuntimeError("Combined dashboard rejected snapshot")
+
+    async def loop(self):
+        delay = 10
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=8)) as session:
+            while True:
+                try:
+                    await self.upload(session)
+                    delay = 10
+                except (aiohttp.ClientError, asyncio.TimeoutError, RuntimeError, ValueError):
+                    log.warning("COMBINED DASHBOARD UPDATE FAILED | paper trading continues")
+                    delay = min(30, delay * 2)
+                await asyncio.sleep(delay)
+
+    async def stopped(self):
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=8)) as session:
+                await self.upload(session, "stopped")
+        except (aiohttp.ClientError, asyncio.TimeoutError, RuntimeError, ValueError):
+            log.warning("Combined dashboard final update unavailable; local state remains saved")
+
+
+async def run_with_dashboard(bot, publisher):
+    tasks = [asyncio.create_task(bot.start()), asyncio.create_task(publisher.loop())]
+    try:
+        await asyncio.gather(*tasks)
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        await publisher.stopped()
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--state',default='paper_state_final2.json')
@@ -103,8 +173,15 @@ def main():
     args=parser.parse_args()
     bot=Final2PaperHunter(args.state,reset=args.reset)
     log.warning('FINAL-2 PAPER: excludes liquidation, funding and slippage; averaging increases exposure')
-    try:asyncio.run(bot.start())
-    except KeyboardInterrupt:log.info('Final-2 stopped; state saved')
+    token = os.environ.get("CASCADE_DASHBOARD_TOKEN", "").strip()
+    try:
+        if token:
+            log.info("COMBINED DASHBOARD TELEMETRY ENABLED | session=%s", Path(args.state).stem)
+            asyncio.run(run_with_dashboard(bot, DashboardPublisher(bot, Path(args.state).stem, token)))
+        else:
+            asyncio.run(bot.start())
+    except KeyboardInterrupt:
+        log.info("Final-2 stopped; state saved")
 
 
 if __name__=='__main__':main()
